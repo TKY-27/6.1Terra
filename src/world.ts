@@ -48,6 +48,7 @@ export class World {
   scene: THREE.Scene;
   obstacles: Obstacle[] = [];
   platforms: Obstacle[] = [];
+  roads: { ax: number; az: number; bx: number; bz: number }[] = [];
   loot: Loot[] = [];
   ring: THREE.Mesh;
   navigation: Navigation;
@@ -390,6 +391,12 @@ export class World {
     const start = 22,
       end = length - 22;
     if (end <= start) return;
+    this.roads.push({
+      ax: ax + ux * start,
+      az: az + uz * start,
+      bx: ax + ux * end,
+      bz: az + uz * end,
+    });
     const segments = Math.ceil((end - start) / 4),
       positions: number[] = [],
       uv: number[] = [],

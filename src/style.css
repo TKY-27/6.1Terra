@@ -273,7 +273,7 @@ footer,
   font-size: 30px;
 }
 .alive-box span {
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1.4;
   letter-spacing: 0.12em;
 }
@@ -412,7 +412,7 @@ footer,
 .operator small,
 .ability small,
 .weapon small {
-  font-size: 9px;
+  font-size: 11px;
   color: #c6d4c8;
 }
 .operator b {
@@ -423,10 +423,10 @@ footer,
   align-items: center;
   gap: 7px;
   margin: 5px 0;
-  font-size: 9px;
+  font-size: 10px;
 }
 .bar-row span {
-  width: 43px;
+  width: 49px;
   font-weight: 800;
   letter-spacing: 0.08em;
 }

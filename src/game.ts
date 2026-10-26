@@ -234,8 +234,9 @@ export class Game {
       this.renderer.setSize(innerWidth, innerHeight);
     });
     window.addEventListener("keydown", (e) => {
+      if (this.paused || this.phase === "menu" || this.phase === "ended")
+        return;
       if (["Space", "Tab", "ControlLeft"].includes(e.code)) e.preventDefault();
-      if (this.paused) return;
       this.keys.add(e.code);
       if (e.repeat) return;
       if (e.code === "Space" && this.phase === "aircraft") this.jump();
@@ -298,6 +299,7 @@ export class Game {
       this.keys.clear();
       this.fire = false;
       this.aim = false;
+      this.ui.inventory.classList.remove("show");
       if (this.phase === "aircraft") {
         this.paused = true;
         this.ui.pause.classList.add("show");
@@ -322,6 +324,7 @@ export class Game {
         this.fire = false;
         this.aim = false;
         this.keys.clear();
+        this.ui.inventory.classList.remove("show");
         if (this.phase === "playing" || this.phase === "drop") {
           this.paused = true;
           this.ui.pause.classList.add("show");
@@ -1478,6 +1481,14 @@ export class Game {
       ctx.beginPath();
       ctx.moveTo(0, i);
       ctx.lineTo(160, i);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = "#708078";
+    ctx.lineWidth = 2;
+    for (const road of this.world.roads) {
+      ctx.beginPath();
+      ctx.moveTo(80 + road.ax / 2, 80 + road.az / 2);
+      ctx.lineTo(80 + road.bx / 2, 80 + road.bz / 2);
       ctx.stroke();
     }
     ctx.fillStyle = "#8da29a";

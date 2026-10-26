@@ -29,7 +29,10 @@ try {
   await page.waitForFunction(() => window.terra, null, { timeout: 60000 });
   await page.waitForSelector("#boot", { state: "detached", timeout: 60000 });
   assert.ok(await page.locator("[data-ui=menu]").isVisible());
-  await page.click("#start");
+  await page.keyboard.press("Tab");
+  assert.equal(await page.evaluate(() => document.activeElement.id), "start");
+  assert.equal(await page.locator("[data-ui=inventory]").isVisible(), false);
+  await page.keyboard.press("Enter");
   assert.deepEqual(
     await page.evaluate(() => [window.terra.phase, window.terra.bots.length]),
     ["aircraft", 9],
