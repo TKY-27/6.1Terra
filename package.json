@@ -1,0 +1,26 @@
+{
+  "name": "6-1terra",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "deploy": "npm run build && wrangler deploy",
+    "test": "node tests/core.test.mjs",
+    "test:browser": "node tests/browser.mjs",
+    "profile:browser": "node tests/performance.mjs",
+    "test:simulation": "node tests/simulation.mjs"
+  },
+  "dependencies": {
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.180.0",
+    "playwright-core": "^1.64.1",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.7",
+    "wrangler": "^4.40.2"
+  }
+}
