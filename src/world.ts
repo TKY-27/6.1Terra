@@ -11,6 +11,7 @@ const mat = (c: number, roughness = 1, metalness = 0) =>
   new THREE.MeshStandardMaterial({ color: c, roughness, metalness });
 const materials = {
   ground: mat(0x697467),
+  road: mat(0x55605a, 1),
   rock: mat(0x796e5e),
   dark: mat(0x263b3b),
   steel: mat(0x586763, 0.72, 0.5),
@@ -117,22 +118,55 @@ export class World {
     ];
     const nearSite = (x: number, z: number) =>
       sites.some(([sx, sz]) => Math.abs(x - sx) < 24 && Math.abs(z - sz) < 24);
+    const links = [
+      [0, 1],
+      [1, 2],
+      [0, 3],
+      [1, 4],
+      [2, 5],
+      [3, 4],
+      [4, 5],
+      [3, 6],
+      [4, 6],
+      [4, 7],
+      [5, 7],
+      [6, 7],
+    ];
+    const nearRoad = (x: number, z: number) =>
+      links.some(([a, b]) => {
+        const [ax, az] = sites[a],
+          [bx, bz] = sites[b],
+          dx = bx - ax,
+          dz = bz - az;
+        const t = THREE.MathUtils.clamp(
+          ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz),
+          0,
+          1,
+        );
+        return (
+          t > 0.15 &&
+          t < 0.85 &&
+          Math.hypot(x - (ax + dx * t), z - (az + dz * t)) < 5
+        );
+      });
     for (let i = 0; i < 330; i++) {
       const x = (this.rand() - 0.5) * 320,
         z = (this.rand() - 0.5) * 320;
-      if (nearSite(x, z)) continue;
+      if (nearSite(x, z) || nearRoad(x, z)) continue;
       this.tree(x, z, 2.5 + this.rand() * 3);
     }
+    for (const [a, b] of links)
+      this.road(sites[a][0], sites[a][1], sites[b][0], sites[b][1]);
     sites.forEach(([x, z], i) => this.facility(x, z, i));
     this.canyon();
     for (let i = 0; i < 48; i++) {
       const x = (this.rand() - 0.5) * 290,
         z = (this.rand() - 0.5) * 290;
-      if (!nearSite(x, z)) this.rock(x, z);
+      if (!nearSite(x, z) && !nearRoad(x, z)) this.rock(x, z);
     }
     this.navigation = new Navigation(this.obstacles);
     this.batchStatic();
-    this.addGroundCover();
+    this.addGroundCover((x, z) => nearSite(x, z) || nearRoad(x, z));
     for (let i = 0; i < 45; i++) {
       const site = sites[i % sites.length];
       let x = site[0],
@@ -224,7 +258,7 @@ export class World {
     texture.colorSpace = THREE.SRGBColorSpace;
     return texture;
   }
-  addGroundCover() {
+  addGroundCover(excluded: (x: number, z: number) => boolean) {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute(
       "position",
@@ -242,24 +276,42 @@ export class World {
       roughness: 1,
       side: THREE.DoubleSide,
     });
-    const grass = new THREE.InstancedMesh(geometry, material, 5000);
+    // Keep the same shared geometry and material, but cull grass in 32 m tiles.
+    const tiles = new Map<
+      string,
+      { matrix: THREE.Matrix4; color: THREE.Color }[]
+    >();
     const dummy = new THREE.Object3D();
-    const color = new THREE.Color();
     for (let i = 0; i < 5000; i++) {
       const x = (this.rand() - 0.5) * MAP * 2,
         z = (this.rand() - 0.5) * MAP * 2;
+      if (excluded(x, z)) continue;
       dummy.position.set(x, ground(x, z) - 0.03, z);
       dummy.rotation.y = this.rand() * Math.PI;
       const scale = 0.35 + this.rand() * 0.7;
       dummy.scale.set(scale, scale * (0.7 + this.rand()), scale);
       dummy.updateMatrix();
-      grass.setMatrixAt(i, dummy.matrix);
-      color.setHSL(0.19 + this.rand() * 0.05, 0.3, 0.42 + this.rand() * 0.16);
-      grass.setColorAt(i, color);
+      const color = new THREE.Color().setHSL(
+        0.19 + this.rand() * 0.05,
+        0.3,
+        0.42 + this.rand() * 0.16,
+      );
+      const key = `${Math.floor(x / 32)}:${Math.floor(z / 32)}`;
+      const entries = tiles.get(key) || [];
+      entries.push({ matrix: dummy.matrix.clone(), color });
+      tiles.set(key, entries);
     }
-    grass.instanceMatrix.needsUpdate = true;
-    grass.frustumCulled = false;
-    this.scene.add(grass);
+    for (const entries of tiles.values()) {
+      const grass = new THREE.InstancedMesh(geometry, material, entries.length);
+      entries.forEach((entry, i) => {
+        grass.setMatrixAt(i, entry.matrix);
+        grass.setColorAt(i, entry.color);
+      });
+      grass.instanceMatrix.needsUpdate = true;
+      if (grass.instanceColor) grass.instanceColor.needsUpdate = true;
+      grass.computeBoundingSphere();
+      this.scene.add(grass);
+    }
   }
   batchStatic() {
     // Batch by material and spatial tile so the renderer can cull distant geometry.
@@ -328,6 +380,64 @@ export class World {
     const y = ground(x, z);
     this.box(x, y + h / 2, z, w, h, d, m);
     this.obstacles.push({ x, z, w, d, h, y });
+  }
+  road(ax: number, az: number, bx: number, bz: number) {
+    const dx = bx - ax,
+      dz = bz - az,
+      length = Math.hypot(dx, dz),
+      ux = dx / length,
+      uz = dz / length;
+    const start = 22,
+      end = length - 22;
+    if (end <= start) return;
+    const segments = Math.ceil((end - start) / 4),
+      positions: number[] = [],
+      uv: number[] = [],
+      indices: number[] = [];
+    const mx = (ax + bx) / 2,
+      mz = (az + bz) / 2;
+    for (let i = 0; i <= segments; i++) {
+      const t = start + ((end - start) * i) / segments,
+        cx = ax + ux * t,
+        cz = az + uz * t;
+      for (const side of [-1, 1]) {
+        const x = cx - uz * side * 2.6,
+          z = cz + ux * side * 2.6;
+        positions.push(x - mx, ground(x, z) + 0.12, z - mz);
+        uv.push((side + 1) / 2, t / 5);
+      }
+      if (i < segments) {
+        const n = i * 2;
+        indices.push(n, n + 1, n + 2, n + 1, n + 3, n + 2);
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(positions, 3),
+    );
+    geo.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    const road = new THREE.Mesh(geo, materials.road);
+    road.position.set(mx, 0, mz);
+    road.receiveShadow = true;
+    this.scene.add(road);
+    for (let t = start + 4; t < end; t += 9) {
+      const x = ax + ux * t,
+        z = az + uz * t;
+      const stripe = this.box(
+        x,
+        ground(x, z) + 0.16,
+        z,
+        0.15,
+        0.035,
+        3,
+        materials.yellow,
+        false,
+      );
+      stripe.rotation.y = Math.atan2(ux, uz);
+    }
   }
   facility(x: number, z: number, index: number) {
     const y = ground(x, z); // cluster of modular buildings and cover
@@ -425,6 +535,61 @@ export class World {
         materials.yellow,
         false,
       );
+    }
+    // Each district has a different industrial landmark and usable cover.
+    const lx = x + 16,
+      lz = z - 5,
+      base = ground(lx, lz);
+    if (index % 3 === 0) {
+      for (const offset of [-1.8, 1.8]) {
+        const tank = new THREE.Mesh(
+          new THREE.CylinderGeometry(1.35, 1.35, 6, 12),
+          materials.steel,
+        );
+        tank.position.set(lx, base + 3, lz + offset);
+        this.scene.add(tank);
+        const cap = new THREE.Mesh(
+          new THREE.CylinderGeometry(1.4, 1.4, 0.25, 12),
+          materials.rust,
+        );
+        cap.position.set(lx, base + 6.1, lz + offset);
+        this.scene.add(cap);
+        this.obstacles.push({
+          x: lx,
+          z: lz + offset,
+          w: 2.7,
+          d: 2.7,
+          h: 6.2,
+          y: base,
+        });
+      }
+      this.box(lx, base + 5.2, lz, 0.3, 0.3, 6, materials.yellow);
+    } else if (index % 3 === 1) {
+      for (const dx of [-1.4, 1.4])
+        for (const dz of [-1.4, 1.4]) {
+          this.obstacle(lx + dx, lz + dz, 0.35, 0.35, 10, materials.dark);
+        }
+      for (const height of [3, 6, 9]) {
+        this.box(lx, base + height, lz, 3.1, 0.25, 0.25, materials.rust);
+        this.box(lx, base + height, lz, 0.25, 0.25, 3.1, materials.rust);
+      }
+      const beacon = new THREE.Mesh(
+        new THREE.SphereGeometry(0.5, 8, 6),
+        materials.glass,
+      );
+      beacon.position.set(lx, base + 10.3, lz);
+      this.scene.add(beacon);
+    } else {
+      this.obstacle(lx, lz, 3, 3, 2.3, materials.dark);
+      for (const offset of [-0.8, 0, 0.8]) {
+        const pipe = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.23, 0.23, 3.5, 8),
+          materials.steel,
+        );
+        pipe.position.set(lx + offset, base + 4, lz);
+        this.scene.add(pipe);
+        this.box(lx + offset, base + 5.8, lz, 0.65, 0.12, 0.65, materials.rust);
+      }
     }
   }
   canyon() {

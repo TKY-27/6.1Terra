@@ -49,6 +49,16 @@ try {
     return g.phase;
   });
   assert.equal(landed, "playing");
+  await page.setViewportSize({ width: 1100, height: 700 });
+  await page.waitForFunction(
+    () => Math.abs(window.terra.camera.aspect - 1100 / 700) < 0.001,
+  );
+  await page.evaluate(() => document.exitPointerLock());
+  await page.waitForSelector("[data-ui=pause].show", { timeout: 15000 });
+  await page.click("#resume");
+  await page.waitForFunction(() => !window.terra.paused, null, {
+    timeout: 15000,
+  });
   await page.evaluate(() => {
     const g = window.terra;
     g.paused = false;
