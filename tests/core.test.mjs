@@ -55,4 +55,7 @@ test("upward movement detects an overhead platform only when crossed", () => {
   assert.equal(World.prototype.ceiling.call(world, 0, 0, 2.8, 3.1), 3);
   assert.equal(World.prototype.ceiling.call(world, 5, 0, 2.8, 3.1), Infinity);
   assert.equal(World.prototype.ceiling.call(world, 0, 0, 3.5, 4), Infinity);
+  assert.equal(World.prototype.collides.call(world, 0, 0, 0.3, 1.5), true);
+  assert.equal(World.prototype.collides.call(world, 0, 0, 0.3, 0), false);
+  assert.equal(World.prototype.collides.call(world, 0, 0, 0.3, 3.4), false);
 });

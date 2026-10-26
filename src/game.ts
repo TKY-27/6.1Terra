@@ -49,6 +49,7 @@ interface Fighter {
   scanCooldown: number;
   charges: number;
   throwCooldown: number;
+  recoil: number;
 }
 const clamp = THREE.MathUtils.clamp;
 export class Game {
@@ -81,6 +82,7 @@ export class Game {
   aircraft: THREE.Group;
   gun: THREE.Group;
   gunKick = 0;
+  muzzleTime = 0;
   shake = 0;
   effects: {
     mesh: THREE.Object3D;
@@ -114,6 +116,7 @@ export class Game {
   fastFrames = 0;
   renderScale = 1;
   ui: { [key: string]: HTMLElement };
+  mapBackground: HTMLCanvasElement;
   constructor() {
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
@@ -163,6 +166,7 @@ export class Game {
     document
       .querySelectorAll<HTMLElement>("[data-ui]")
       .forEach((e) => (this.ui[e.dataset.ui!] = e));
+    this.mapBackground = this.createMapBackground();
     this.bind();
     this.camera.position.set(130, 65, 135);
     this.camera.lookAt(0, 4, 0);
@@ -201,6 +205,7 @@ export class Game {
       scanCooldown: human ? 0 : 8 + Math.random() * 12,
       charges: 2,
       throwCooldown: 0,
+      recoil: 0,
       loadout: WEAPONS.map((w, i) => ({
         owned: i === 0,
         ammo: w.mag,
@@ -214,7 +219,12 @@ export class Game {
     return bot;
   }
   showWeapon(index: number) {
-    this.gun.children.forEach((model, i) => (model.visible = i === index));
+    this.gun.children.forEach((model, i) => {
+      model.visible = i === index;
+      const muzzle = model.getObjectByName("muzzleFlash");
+      if (muzzle) muzzle.visible = false;
+    });
+    this.muzzleTime = 0;
   }
 
   bind() {
@@ -484,7 +494,7 @@ export class Game {
   reload(f: Fighter) {
     const w = WEAPONS[f.weapon];
     if (f.reload > 0 || f.ammo >= w.mag || f.reserve <= 0 || !f.alive) return;
-    f.reload = 1.4;
+    f.reload = w.reloadTime;
     if (f === this.player) {
       this.sound("reload");
       this.notify("RELOADING");
@@ -709,7 +719,10 @@ export class Game {
       dir.y += (Math.random() - 0.5) * w.spread * (this.aim ? 0.45 : 1);
       dir.normalize();
       this.gunKick = 0.16;
-      this.pitch = Math.min(1.3, this.pitch + 0.007);
+      this.pitch = Math.min(1.3, this.pitch + w.recoil);
+      this.muzzleTime = 0.07;
+      const muzzle = this.gun.children[f.weapon].getObjectByName("muzzleFlash");
+      if (muzzle) muzzle.visible = true;
       this.sound("shoot", undefined, f.weapon);
     } else {
       if (!target) return;
@@ -721,6 +734,7 @@ export class Game {
       dir.x += (Math.random() - 0.5) * 0.1;
       dir.z += (Math.random() - 0.5) * 0.1;
       dir.normalize();
+      f.recoil = 0.12;
       this.sound("shoot", f.pos, f.weapon);
     }
     let hit: Fighter | null = null,
@@ -742,13 +756,15 @@ export class Game {
     const end = origin.clone().addScaledVector(dir, dist);
     this.tracer(origin, end, w.color);
     if (!hit && dist < w.range) this.impact(end);
-    const flash = new THREE.Mesh(
-      new THREE.SphereGeometry(0.12, 6, 4),
-      new THREE.MeshBasicMaterial({ color: 0xffd18b, transparent: true }),
-    );
-    flash.position.copy(origin).addScaledVector(dir, 0.6);
-    this.scene.add(flash);
-    this.effects.push({ mesh: flash, life: 0.06, max: 0.06 });
+    if (f !== this.player) {
+      const flash = new THREE.Mesh(
+        new THREE.SphereGeometry(0.12, 6, 4),
+        new THREE.MeshBasicMaterial({ color: 0xffd18b, transparent: true }),
+      );
+      flash.position.copy(origin).addScaledVector(dir, 0.6);
+      this.scene.add(flash);
+      this.effects.push({ mesh: flash, life: 0.06, max: 0.06 });
+    }
     if (hit) {
       this.damage(hit, w.damage, f);
       if (f === this.player) {
@@ -983,6 +999,7 @@ export class Game {
   updateFighter(f: Fighter, dt: number) {
     f.cooldown = Math.max(0, f.cooldown - dt);
     f.throwCooldown = Math.max(0, f.throwCooldown - dt);
+    f.recoil = THREE.MathUtils.damp(f.recoil, 0, 12, dt);
     if (f.reload > 0) {
       f.reload -= dt;
       if (f.reload <= 0) {
@@ -1015,6 +1032,7 @@ export class Game {
           (Math.random() - 0.5) * 115,
         );
         b.group!.visible = true;
+        b.group!.position.copy(b.pos);
       }
       return;
     }
@@ -1029,9 +1047,15 @@ export class Game {
       }
       b.pos.y = Math.max(gy, b.pos.y - dt * 12);
       b.group!.position.copy(b.pos);
+      b.group!.rotation.x = -0.3;
+      b.group!.children[4].rotation.z = -0.6;
+      b.group!.children[5].rotation.z = 0.6;
       return;
     }
     b.pos.y = gy;
+    b.group!.rotation.x = 0;
+    b.group!.children[4].rotation.z = 0;
+    b.group!.children[5].rotation.z = 0;
     b.think -= dt;
     let target: Fighter | undefined;
     let nearest = 55;
@@ -1208,10 +1232,19 @@ export class Game {
           Math.sin(this.time * 9 + (i === 2 ? 0 : Math.PI)) *
           (dist > 2 ? 0.35 : 0);
     });
+    const sway = dist > 2 ? Math.sin(this.time * 9) * 0.08 : 0;
+    b.group!.children[4].rotation.x = 0.52 + sway;
+    b.group!.children[5].rotation.x = 0.52 - sway - b.recoil * 1.2;
+    b.group!.children[6].position.z = b.recoil * 0.5;
   }
   updatePlayer(dt: number) {
     const p = this.player;
     this.updateFighter(p, dt);
+    this.muzzleTime = Math.max(0, this.muzzleTime - dt);
+    if (this.muzzleTime === 0) {
+      const muzzle = this.gun.children[p.weapon].getObjectByName("muzzleFlash");
+      if (muzzle) muzzle.visible = false;
+    }
     if (this.phase === "drop") {
       const forward =
           (this.keys.has("KeyW") ? 1 : 0) - (this.keys.has("KeyS") ? 1 : 0),
@@ -1332,7 +1365,9 @@ export class Game {
       ) + bob;
     this.gun.position.z = -0.58 + this.gunKick;
     const reloadPose =
-      p.reload > 0 ? Math.sin((1 - p.reload / 1.4) * Math.PI) : 0;
+      p.reload > 0
+        ? Math.sin((1 - p.reload / WEAPONS[p.weapon].reloadTime) * Math.PI)
+        : 0;
     this.gun.rotation.z = -reloadPose * 0.5;
     this.gun.rotation.x = reloadPose * 0.18;
     this.gun.position.y -= reloadPose * 0.13;
@@ -1426,7 +1461,36 @@ export class Game {
       this.camera.position.z,
     );
     this.skyLight.target.updateMatrixWorld();
-    this.updateUI(dt);
+  }
+  createMapBackground() {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 160;
+    const ctx = canvas.getContext("2d")!;
+    ctx.fillStyle = "#182d2b";
+    ctx.fillRect(0, 0, 160, 160);
+    ctx.strokeStyle = "#59746d";
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 160; i += 20) {
+      ctx.beginPath();
+      ctx.moveTo(i, 0);
+      ctx.lineTo(i, 160);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, i);
+      ctx.lineTo(160, i);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#8da29a";
+    for (const o of this.world.obstacles) {
+      if (o.w < 5) continue;
+      ctx.fillRect(
+        80 + o.x / 2 - o.w / 4,
+        80 + o.z / 2 - o.d / 4,
+        o.w / 2,
+        o.d / 2,
+      );
+    }
+    return canvas;
   }
   updateUI(dt: number) {
     const p = this.player,
@@ -1470,38 +1534,16 @@ export class Game {
       nearby && this.phase === "playing"
         ? `[ E ]  PICK UP ${nearby.type === "weapon" ? WEAPONS[nearby.weapon].name : nearby.type.toUpperCase()}`
         : "";
-    this.ui.inventoryInfo.innerHTML = `${p.loadout.map((slot, i) => `${i + 1} · ${WEAPONS[i].name} ${slot.owned ? (i === p.weapon ? " / EQUIPPED" : " / READY") : " / EMPTY"}`).join("<br>")}<br>${p.ammo} / ${p.reserve} ROUNDS<br><br>SHIELD ${Math.ceil(p.shield)} / 100<br>HEALTH ${Math.ceil(p.health)} / 100<br>FIELD REPAIRS ${p.medkits}<br><br>1 / 2 / 3 · SWITCH OWNED WEAPON<br>H · FIELD REPAIR`;
+    if (this.ui.inventory.classList.contains("show"))
+      this.ui.inventoryInfo.innerHTML = `${p.loadout.map((slot, i) => `${i + 1} · ${WEAPONS[i].name} ${slot.owned ? (i === p.weapon ? " / EQUIPPED" : " / READY") : " / EMPTY"}`).join("<br>")}<br>${p.ammo} / ${p.reserve} ROUNDS<br><br>SHIELD ${Math.ceil(p.shield)} / 100<br>HEALTH ${Math.ceil(p.health)} / 100<br>FIELD REPAIRS ${p.medkits}<br><br>1 / 2 / 3 · SWITCH OWNED WEAPON<br>H · FIELD REPAIR`;
     const c = this.ui.map as HTMLCanvasElement,
       ctx = c.getContext("2d")!;
     ctx.clearRect(0, 0, 160, 160);
-    ctx.fillStyle = "#182d2b";
-    ctx.fillRect(0, 0, 160, 160);
-    ctx.strokeStyle = "#59746d";
-    ctx.lineWidth = 1;
-    for (let i = 0; i < 160; i += 20) {
-      ctx.beginPath();
-      ctx.moveTo(i, 0);
-      ctx.lineTo(i, 160);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(0, i);
-      ctx.lineTo(160, i);
-      ctx.stroke();
-    }
+    ctx.drawImage(this.mapBackground, 0, 0);
     ctx.strokeStyle = "#eeb774";
     ctx.beginPath();
     ctx.arc(80, 80, this.ringRadius / 2, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.fillStyle = "#8da29a";
-    for (const o of this.world.obstacles) {
-      if (o.w < 5) continue;
-      ctx.fillRect(
-        80 + o.x / 2 - o.w / 4,
-        80 + o.z / 2 - o.d / 4,
-        o.w / 2,
-        o.d / 2,
-      );
-    }
     ctx.save();
     ctx.translate(80 + p.pos.x / 2, 80 + p.pos.z / 2);
     ctx.rotate(-this.yaw);
@@ -1554,6 +1596,8 @@ export class Game {
       this.update(dt);
       remaining -= dt;
     }
+    if (!this.paused && this.phase !== "menu" && this.phase !== "ended")
+      this.updateUI(elapsed);
     this.sky.position.copy(this.camera.position);
     this.renderer.render(this.scene, this.camera);
     requestAnimationFrame(this.loop);

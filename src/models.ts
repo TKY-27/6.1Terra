@@ -214,6 +214,29 @@ export function createGun() {
       }),
   );
   const glow = new THREE.MeshBasicMaterial({ color: 0x7cd5c7 });
+  const flashCanvas = document.createElement("canvas");
+  flashCanvas.width = flashCanvas.height = 64;
+  const flashContext = flashCanvas.getContext("2d")!;
+  const flashGradient = flashContext.createRadialGradient(
+    32,
+    32,
+    1,
+    32,
+    32,
+    30,
+  );
+  flashGradient.addColorStop(0, "rgba(255,255,238,1)");
+  flashGradient.addColorStop(0.25, "rgba(255,205,112,.85)");
+  flashGradient.addColorStop(1, "rgba(255,132,46,0)");
+  flashContext.fillStyle = flashGradient;
+  flashContext.fillRect(0, 0, 64, 64);
+  const flashMaterial = new THREE.SpriteMaterial({
+    map: new THREE.CanvasTexture(flashCanvas),
+    transparent: true,
+    depthWrite: false,
+    depthTest: false,
+    blending: THREE.AdditiveBlending,
+  });
   for (let index = 0; index < 3; index++) {
     const model = new THREE.Group(),
       accent = accents[index];
@@ -301,6 +324,12 @@ export function createGun() {
     const glove = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), grip);
     glove.position.set(-0.1, -0.18, -0.34);
     model.add(glove);
+    const muzzle = new THREE.Sprite(flashMaterial);
+    muzzle.name = "muzzleFlash";
+    muzzle.visible = false;
+    muzzle.position.set(0, 0.015, -length * 1.12 - 0.08);
+    muzzle.scale.set(0.27, 0.27, 1);
+    model.add(muzzle);
     model.visible = index === 0;
     holder.add(model);
   }

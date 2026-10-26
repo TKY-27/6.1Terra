@@ -697,13 +697,16 @@ export class World {
     });
   }
   collides(x: number, z: number, r = 0.55, y = -Infinity) {
-    return this.obstacles.some(
-      (o) =>
-        y < o.y + o.h - 0.15 &&
-        x > o.x - o.w / 2 - r &&
-        x < o.x + o.w / 2 + r &&
-        z > o.z - o.d / 2 - r &&
-        z < o.z + o.d / 2 + r,
+    const overlaps = (o: Obstacle) =>
+      x > o.x - o.w / 2 - r &&
+      x < o.x + o.w / 2 + r &&
+      z > o.z - o.d / 2 - r &&
+      z < o.z + o.d / 2 + r;
+    return (
+      this.obstacles.some((o) => y < o.y + o.h - 0.15 && overlaps(o)) ||
+      this.platforms.some(
+        (o) => y < o.y + o.h - 0.15 && y + 1.65 > o.y && overlaps(o),
+      )
     );
   }
   surface(x: number, z: number, y: number) {
@@ -746,13 +749,14 @@ export class World {
         return;
       }
       let top = -Infinity;
-      for (const o of this.obstacles)
+      for (const o of [...this.obstacles, ...this.platforms])
         if (
           nx > o.x - o.w / 2 - r &&
           nx < o.x + o.w / 2 + r &&
           nz > o.z - o.d / 2 - r &&
           nz < o.z + o.d / 2 + r &&
-          o.y + o.h > pos.y
+          o.y + o.h > pos.y &&
+          o.y < pos.y + 1.65
         )
           top = Math.max(top, o.y + o.h);
       if (top > pos.y && top - pos.y <= 0.7 && !this.collides(nx, nz, r, top)) {

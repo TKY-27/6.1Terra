@@ -90,6 +90,43 @@ try {
       abilities.scan > 29 &&
       abilities.marker,
   );
+  const firing = await page.evaluate(() => {
+    const g = window.terra,
+      p = g.player;
+    g.camera.position.copy(p.pos);
+    g.camera.position.y += 1.65;
+    g.yaw = 0;
+    g.pitch = 0;
+    const ammo = p.ammo,
+      reserve = p.reserve;
+    g.shoot(p);
+    const flash = g.gun.children[p.weapon].getObjectByName("muzzleFlash");
+    const shown = flash.visible,
+      consumed = p.ammo === ammo - 1;
+    g.updatePlayer(0.1);
+    const faded = !flash.visible;
+    g.reload(p);
+    for (let i = 0; i < 40; i++) g.updateFighter(p, 0.05);
+    return {
+      shown,
+      consumed,
+      faded,
+      reloaded: p.ammo === ammo && p.reserve === reserve - 1,
+    };
+  });
+  assert.ok(firing.shown && firing.consumed && firing.faded && firing.reloaded);
+  await page.keyboard.down("Tab");
+  await page.waitForSelector("[data-ui=inventory].show", { timeout: 15000 });
+  await page.waitForFunction(
+    () =>
+      document
+        .querySelector("[data-ui=inventoryInfo]")
+        .textContent.includes("AR-06 CARBINE"),
+    null,
+    { timeout: 15000 },
+  );
+  await page.keyboard.up("Tab");
+  assert.equal(await page.locator("[data-ui=inventory]").isVisible(), false);
   const pickup = await page.evaluate(() => {
     const g = window.terra,
       l = g.world.loot.find((item) => item.type === "weapon" && !item.taken);
