@@ -22,5 +22,26 @@
     "typescript": "^5.9.2",
     "vite": "^7.1.7",
     "wrangler": "^4.40.2"
-  }
+  },
+  "description": "A single-player browser battle royale built with Three.js.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TKY-27/6.1Terra.git"
+  },
+  "bugs": {
+    "url": "https://github.com/TKY-27/6.1Terra/issues"
+  },
+  "homepage": "https://github.com/TKY-27/6.1Terra#readme",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "keywords": [
+    "battle-royale",
+    "browser-game",
+    "threejs",
+    "typescript",
+    "webgl",
+    "single-player"
+  ]
 }

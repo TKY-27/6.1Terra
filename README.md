@@ -1,11 +1,17 @@
 # 6.1Terra
 
-6.1Terra is a browser battle royale built with Three.js. The map, character and weapon geometry, textures, effects, and synthesized audio are generated locally at runtime. The game makes no requests to external asset or game services.
+6.1Terra is a single-player browser battle royale built with TypeScript and Three.js. Drop into a sci-fi arena against nine bots, collect weapons and supplies, and survive the shrinking ring. The map, character and weapon geometry, textures, effects, and synthesized audio are generated locally at runtime; the game does not depend on external asset or game services.
+
+The project is playable and under active development. Visual quality, AI behavior, balance, and performance still need refinement; see [GOAL.md](GOAL.md) for the current status and verification limits.
 
 ## Play locally
 
+Requires Node.js 22.12 or later, npm, and a modern desktop browser with WebGL, keyboard, and mouse.
+
 ```sh
-npm install
+git clone https://github.com/TKY-27/6.1Terra.git
+cd 6.1Terra
+npm ci
 npm run dev
 ```
 
@@ -41,3 +47,7 @@ npm run deploy
 ```
 
 `npm run deploy` builds the static site and deploys it with Wrangler and `wrangler.jsonc` to Cloudflare Workers Static Assets. Log in to Wrangler and select a Cloudflare account first. Cloudflare Pages can alternatively deploy the `dist` directory with build command `npm run build`.
+
+## Contributing and license
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development and pull request guidance, and [SECURITY.md](SECURITY.md) for vulnerability reports. The project is available under the [MIT License](LICENSE). Third-party dependencies have their own licenses.
